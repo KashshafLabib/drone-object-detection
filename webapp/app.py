@@ -19,7 +19,7 @@ from config import (
     DEFAULT_CONF, DEFAULT_IOU, DEFAULT_IMGSZ, IMGSZ_OPTIONS,
     TRACKER_OPTIONS, CLASS_COLORS_HEX, find_model_path,
 )
-from detector import load_model, detect_image, track_video
+from detector import load_model, detect_image, detect_image_sahi, track_video, is_sahi_available
 from styles import get_css
 from components import (
     metric_card, detection_table, sidebar_section_title,
@@ -68,6 +68,42 @@ def render_sidebar():
         imgsz = st.select_slider("Input resolution", options=IMGSZ_OPTIONS, value=DEFAULT_IMGSZ)
 
         section_divider()
+        sidebar_section_title("SAHI — SLICED INFERENCE")
+
+        sahi_ok = is_sahi_available()
+        if not sahi_ok:
+            st.caption(
+                "⚠️ `sahi` not installed. "
+                "Run `pip install sahi` to enable sliced inference."
+            )
+        use_sahi = st.toggle(
+            "Enable SAHI (better small-object recall)",
+            value=False,
+            disabled=not sahi_ok,
+            help=(
+                "Divides the image into overlapping tiles and runs detection "
+                "on each tile at native resolution. Significantly improves recall "
+                "for tiny objects (pedestrians < 32 px) at the cost of speed."
+            ),
+        )
+        sahi_slice = st.select_slider(
+            "Tile size (px)",
+            options=[320, 480, 512, 640, 800],
+            value=640,
+            disabled=not (sahi_ok and use_sahi),
+            help="Width and height of each tile. Smaller tiles = more tiles = slower but finer detail.",
+        )
+        sahi_overlap = st.slider(
+            "Tile overlap ratio",
+            min_value=0.1,
+            max_value=0.4,
+            value=0.2,
+            step=0.05,
+            disabled=not (sahi_ok and use_sahi),
+            help="Fractional overlap between adjacent tiles (0.2 = 20%). Higher overlap reduces missed detections at tile boundaries.",
+        )
+
+        section_divider()
         sidebar_section_title("TRACKING")
 
         tracker = st.selectbox(
@@ -84,11 +120,12 @@ def render_sidebar():
         **Training**: 1280px, AdamW, 86 epochs
         """)
 
-    return model, custom_path, conf, iou, imgsz, tracker
+    return model, custom_path, conf, iou, imgsz, tracker, use_sahi, sahi_slice, sahi_overlap
 
 
-# ── Image Detection Page ─────────────────────────────────────
-def render_image_tab(model, conf, iou, imgsz):
+# ── Image Detection Page ───────────────────────────────────────────
+def render_image_tab(model, model_path, conf, iou, imgsz,
+                    use_sahi, sahi_slice, sahi_overlap):
     """Render the image detection tab."""
     uploaded = st.file_uploader(
         "Upload a drone/aerial image",
@@ -108,8 +145,31 @@ def render_image_tab(model, conf, iou, imgsz):
     h, w = image_bgr.shape[:2]
 
     # Run detection
-    with st.spinner("Running detection..."):
-        annotated_rgb, stats = detect_image(model, image_bgr, conf, iou, imgsz)
+    if use_sahi:
+        mode_label = f"SAHI ({sahi_slice}px tiles, {int(sahi_overlap * 100)}% overlap)"
+        spinner_msg = f"Running sliced inference ({mode_label})..."
+    else:
+        mode_label = "Standard"
+        spinner_msg = "Running detection..."
+
+    with st.spinner(spinner_msg):
+        if use_sahi:
+            annotated_rgb, stats = detect_image_sahi(
+                model_path, image_bgr, conf, iou, imgsz,
+                slice_size=sahi_slice,
+                overlap_ratio=sahi_overlap,
+            )
+        else:
+            annotated_rgb, stats = detect_image(model, image_bgr, conf, iou, imgsz)
+
+    # Mode badge
+    badge_color = "#4A90D9" if use_sahi else "#8892A0"
+    st.markdown(
+        f'<span style="background:{badge_color};color:#fff;padding:2px 10px;'
+        f'border-radius:12px;font-size:0.78rem;font-weight:600;">{mode_label}</span>',
+        unsafe_allow_html=True,
+    )
+    st.markdown("")
 
     # Metrics row
     c1, c2, c3, c4 = st.columns(4)
@@ -130,7 +190,7 @@ def render_image_tab(model, conf, iou, imgsz):
         st.markdown("**Original**")
         st.image(cv2.cvtColor(image_bgr, cv2.COLOR_BGR2RGB), use_container_width=True)
     with col_det:
-        st.markdown("**Detected**")
+        st.markdown(f"**Detected** ({mode_label})")
         st.image(annotated_rgb, use_container_width=True)
 
     # Detection details
@@ -263,9 +323,9 @@ def render_video_tab(model_path, conf, iou, imgsz, tracker):
         pass
 
 
-# ── Main ─────────────────────────────────────────────────────
+# ── Main ────────────────────────────────────────────────────
 def main():
-    model, model_path, conf, iou, imgsz, tracker = render_sidebar()
+    model, model_path, conf, iou, imgsz, tracker, use_sahi, sahi_slice, sahi_overlap = render_sidebar()
 
     # Header
     st.markdown(
@@ -284,7 +344,8 @@ def main():
     tab_image, tab_video = st.tabs(["IMAGE DETECTION", "VIDEO TRACKING"])
 
     with tab_image:
-        render_image_tab(model, conf, iou, imgsz)
+        render_image_tab(model, model_path, conf, iou, imgsz,
+                         use_sahi, sahi_slice, sahi_overlap)
 
     with tab_video:
         render_video_tab(model_path, conf, iou, imgsz, tracker)

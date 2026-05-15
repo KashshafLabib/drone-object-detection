@@ -97,9 +97,11 @@ def get_css():
         color: #8892A0;
     }
 
-    /* Hide default Streamlit chrome */
+    /* Hide default Streamlit chrome but keep sidebar toggle */
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
-    header {visibility: hidden;}
+    header[data-testid="stHeader"] {
+        background: transparent;
+    }
 </style>
 """

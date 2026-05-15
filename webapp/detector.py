@@ -1,6 +1,8 @@
 """
 Detection and tracking logic for the Drone Detection and Counting System.
 Handles YOLO model inference, image detection, and video tracking.
+Supports both standard whole-image inference and SAHI (Slicing Aided Hyper
+Inference) for improved small-object recall in aerial imagery.
 """
 
 import cv2
@@ -12,6 +14,20 @@ from collections import defaultdict
 from ultralytics import YOLO
 
 from config import CLASS_NAMES, CLASS_COLORS_BGR
+
+
+# ── SAHI availability guard ───────────────────────────────────
+try:
+    from sahi import AutoDetectionModel
+    from sahi.predict import get_sliced_prediction
+    _SAHI_AVAILABLE = True
+except ImportError:
+    _SAHI_AVAILABLE = False
+
+
+def is_sahi_available():
+    """Return True if the sahi package is installed."""
+    return _SAHI_AVAILABLE
 
 
 def load_model(model_path):
@@ -211,7 +227,139 @@ def track_video(model, video_path, conf, iou, imgsz, tracker_type,
     }
 
 
-# ── Private Helpers ──────────────────────────────────────────
+
+# ── SAHI Inference ───────────────────────────────────────────
+
+def detect_image_sahi(
+    model_path, image_bgr, conf, iou, imgsz,
+    slice_size=640, overlap_ratio=0.2,
+):
+    """
+    Run SAHI sliced inference on a single image for improved small object recall.
+
+    The image is divided into overlapping tiles of `slice_size` × `slice_size`
+    pixels with `overlap_ratio` overlap on each axis. Each tile is run through
+    the YOLO model at native resolution; results are merged back into the
+    original coordinate space using SAHI's built-in NMS.
+
+    Args:
+        model_path: Filesystem path to the YOLO weights file (.pt).
+        image_bgr: Input image in BGR format (numpy array).
+        conf: Confidence threshold (0–1).
+        iou: IoU threshold used for post-merge NMS (0–1).
+        imgsz: Input resolution passed to the underlying model.
+        slice_size: Height and width of each tile in pixels (default 640).
+        overlap_ratio: Fractional overlap between adjacent tiles (default 0.2).
+
+    Returns:
+        annotated_rgb: Annotated image in RGB format.
+        stats: Dict with human_count, car_count, total, detections list.
+
+    Raises:
+        ImportError: If the `sahi` package is not installed.
+    """
+    if not _SAHI_AVAILABLE:
+        raise ImportError(
+            "sahi is not installed. Run: pip install sahi"
+        )
+
+    # Save image to a temporary file — SAHI's get_sliced_prediction
+    # accepts a file path or PIL image; a temp file avoids PIL dependency.
+    with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as tmp:
+        tmp_path = tmp.name
+    cv2.imwrite(tmp_path, image_bgr)
+
+    try:
+        # Build an AutoDetectionModel around the same weights
+        detection_model = AutoDetectionModel.from_pretrained(
+            model_type="yolov8",   # compatible with YOLOv11 via ultralytics
+            model_path=model_path,
+            confidence_threshold=conf,
+            device="cuda:0" if _cuda_available() else "cpu",
+        )
+
+        result = get_sliced_prediction(
+            tmp_path,
+            detection_model,
+            slice_height=slice_size,
+            slice_width=slice_size,
+            overlap_height_ratio=overlap_ratio,
+            overlap_width_ratio=overlap_ratio,
+            postprocess_match_threshold=iou,
+            verbose=0,
+        )
+    finally:
+        try:
+            os.unlink(tmp_path)
+        except OSError:
+            pass
+
+    # ── Annotate and count ─────────────────────────────────────
+    human_count = 0
+    car_count = 0
+    detections = []
+    annotated = image_bgr.copy()
+
+    for pred in result.object_prediction_list:
+        cls_id = pred.category.id
+        conf_val = pred.score.value
+        bbox = pred.bbox.to_xyxy()          # [x1, y1, x2, y2] floats
+        x1, y1, x2, y2 = map(int, bbox)
+
+        cls_name = CLASS_NAMES.get(cls_id, f"Class {cls_id}")
+        color = CLASS_COLORS_BGR.get(cls_id, (255, 255, 255))
+
+        if cls_id == 0:
+            human_count += 1
+        elif cls_id == 1:
+            car_count += 1
+
+        # Draw bounding box
+        cv2.rectangle(annotated, (x1, y1), (x2, y2), color, 2)
+
+        # Draw label background and text
+        label = f"{cls_name} {conf_val:.2f}"
+        label_size, _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 1)
+        cv2.rectangle(
+            annotated,
+            (x1, y1 - label_size[1] - 8),
+            (x1 + label_size[0] + 4, y1),
+            color, -1,
+        )
+        cv2.putText(
+            annotated, label, (x1 + 2, y1 - 4),
+            cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1,
+        )
+
+        detections.append({
+            "class": cls_name,
+            "confidence": conf_val,
+            "bbox": [x1, y1, x2, y2],
+        })
+
+    # Draw the same count overlay used by standard inference
+    _draw_count_overlay(annotated, human_count, car_count)
+
+    annotated_rgb = cv2.cvtColor(annotated, cv2.COLOR_BGR2RGB)
+
+    return annotated_rgb, {
+        "human_count": human_count,
+        "car_count": car_count,
+        "total": human_count + car_count,
+        "detections": detections,
+    }
+
+
+def _cuda_available():
+    """Return True if a CUDA-capable GPU is available via PyTorch."""
+    try:
+        import torch
+        return torch.cuda.is_available()
+    except ImportError:
+        return False
+
+
+# ── Private Helpers ───────────────────────────────────────────
 
 def _draw_count_overlay(frame, human_count, car_count):
     """Draw a count summary overlay on the top-left corner of a frame."""
