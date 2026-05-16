@@ -101,7 +101,14 @@ def get_css():
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
     header[data-testid="stHeader"] {
-        background: transparent;
+        background: transparent !important;
+    }
+    /* Ensure sidebar expand arrow is always reachable */
+    [data-testid="collapsedControl"],
+    [data-testid="stSidebarCollapseButton"] {
+        display: block !important;
+        visibility: visible !important;
+        z-index: 999 !important;
     }
 </style>
 """
