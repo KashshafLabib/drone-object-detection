@@ -71,6 +71,13 @@ The dataset contains 10 object classes. For this project, only 3 are relevant to
 
 A thorough EDA was conducted across 24 analysis cells covering dataset structure, class distributions, bounding box statistics, spatial distributions, annotation quality, and visual inspection. The full EDA notebook is available at `notebooks/01_eda.ipynb`, with a structured summary at `notebooks/eda_results.md`.
 
+**Sample Aerial Scenes from the Dataset:**
+<p align="center">
+  <img src="assets/sample_dense.png" width="32%" />
+  <img src="assets/sample_human_heavy.png" width="32%" />
+  <img src="assets/sample_sparse.png" width="32%" />
+</p>
+
 Key findings from the analysis:
 
 #### Image Resolutions
@@ -86,6 +93,8 @@ The dataset contains images at 11 distinct resolutions ranging from 480×360 to 
 Top resolutions: 1400×1050 (2,772 images), 1400×788 (2,232), 1360×765 (1,318), 2000×1500 (772). All splits have 100% image-label pairing with zero missing files.
 
 #### Class Distribution
+
+![Class distribution across all 10 VisDrone categories](assets/class_distribution.png)
 
 | Class | ID | Total | Train % | Val % | Test % | Target |
 |-------|----|-------|---------|-------|--------|--------|
@@ -106,6 +115,8 @@ Target classes (Pedestrian, People, Car) account for 73.2% of all training annot
 
 This is the dominant challenge in the dataset. The vast majority of human annotations are extremely small by standard detection benchmarks:
 
+![Bounding box size distribution — most human annotations fall in the COCO-small category](assets/bbox_size_distribution.png)
+
 | Class | Small (<32×32 px) | Medium (32–96 px) | Large (>96 px) |
 |-------|-------------------|--------------------|----------------|
 | Pedestrian | 82.2% | 17.4% | 0.4% |
@@ -125,6 +136,8 @@ Tiny object breakdown for pedestrians: 27.0% have width < 8 px, 62.5% < 16 px, 9
 #### Object Density
 
 Images contain up to 902 annotated objects, with 703 training images exceeding 100 objects. Mean density is 53 objects per image in the training split.
+
+![Object density histogram across training images](assets/density_histogram.png)
 
 | Split | Min | Max | Mean | Median | >100 objects | >200 objects |
 |-------|-----|-----|------|--------|--------------|--------------|
@@ -278,6 +291,8 @@ Pretrained YOLOv11m backbone weights are transferred. The new P2 head layers are
 
 ### Training Results
 
+![Baseline vs Optimized training comparison — mAP, precision, recall, and loss curves](assets/training_curves.png)
+
 #### Validation Set Metrics (during training)
 
 | Metric | Baseline (640) | Optimized (1280) | Delta |
@@ -296,18 +311,26 @@ Key observations:
 
 #### Test Set Metrics (held-out evaluation)
 
-Evaluated on the test-dev split (1,610 images) using the optimized (1280 px) model:
+Evaluated on the test-dev split (1,610 images) using the optimized (1280 px) model and the experimental P2 head model:
 
-| Metric | Overall | Human | Car |
-|--------|---------|-------|-----|
-| AP@0.5 | 0.6197 | 0.4531 | 0.7864 |
-| AP@0.5:0.95 | 0.3632 | 0.1985 | 0.5279 |
+| Metric | Optimized 1280 (86 ep) | P2 Head (65 ep) |
+|--------|----------------------|-----------------|
+| mAP@0.5 | 0.6197 | 0.5696 |
+| mAP@0.5:0.95 | 0.3632 | 0.3211 |
+| Human AP@0.5 | 0.4531 | 0.3761 |
+| Car AP@0.5 | 0.7864 | 0.7632 |
+| Precision | - | 0.7716 |
+| Recall | - | 0.6149 |
 
-The gap between validation (0.8265 mAP@0.5) and test (0.6197 mAP@0.5) reflects the greater diversity and difficulty of the test-dev split. The Human class AP remains the bottleneck due to the extreme prevalence of sub-32 px objects.
+**Architectural Exploration Note:** The custom P2 head underperforms the optimized model at 65 epochs. This is expected because the P2 head layers were initialized randomly, while the backbone was pretrained on COCO. At 65 epochs with a small batch size (batch=2, yielding noisy gradients), these new layers have not yet fully converged compared to the optimized model, which trained for 86 epochs with a fully pretrained architecture. The results show the approach is promising but requires longer training or a two-stage learning rate strategy where the new P2 head layers receive a higher learning rate.
+
+The gap between validation (0.8265 mAP@0.5) and test (0.6197 mAP@0.5 for the optimized model) reflects the greater diversity and difficulty of the test-dev split. The Human class AP remains the bottleneck due to the extreme prevalence of sub-32 px objects.
 
 ---
 
 ## Task 03: Detection and Counting
+
+![Streamlit webapp — image detection tab with metric cards and side-by-side view](assets/webapp_ui.png)
 
 ### Detection Pipeline
 
@@ -327,6 +350,8 @@ While simple, this approach is appropriate for single-image analysis. Limitation
 
 ### SAHI Integration
 
+![Standard inference vs SAHI — SAHI recovers significantly more small human detections](assets/sahi_comparison.png)
+
 To address the small object detection gap, SAHI (Slicing Aided Hyper Inference) is integrated as an alternative inference mode available via the web application's sidebar toggle. SAHI divides the input image into overlapping tiles (configurable size, default 640×640 px with 20% overlap), runs detection independently on each tile at native resolution, then merges all detections back into the original coordinate space using NMS.
 
 This avoids downscaling the full image and preserves fine spatial detail for tiny objects. A 13 px pedestrian remains 13 px within its tile rather than being compressed further during whole-image resize.
@@ -339,6 +364,8 @@ The webapp exposes three SAHI controls:
 ---
 
 ## Task 04: Object Tracking (Bonus)
+
+![ByteTrack vs BotSORT — per-frame human count comparison](assets/tracker_comparison.png)
 
 ### Tracking Implementation
 
@@ -369,6 +396,8 @@ Unlike per-frame detection counting, the tracking-based count uses set-based acc
 
 ### Prediction Outputs
 
+![Detection on test sample — bounding boxes with class labels and count overlay](assets/detection_sample.png)
+
 Detection visualizations are generated for sample test images showing bounding boxes, class labels, confidence scores, and per-image human/car counts. Side-by-side comparisons between standard inference and SAHI-enhanced inference demonstrate the improvement in small object recall.
 
 ### Counting Accuracy
@@ -386,13 +415,13 @@ Predicted human and car counts are compared against ground truth annotation coun
 | Baseline (YOLOv11m, 640 px) | 0.6922 | 0.4077 | 0.7746 | 0.6383 |
 | Optimized (YOLOv11m, 1280 px) | 0.8265 | 0.5136 | 0.8337 | 0.7708 |
 
-Test set evaluation (optimized model):
+Test set evaluation (optimized model vs P2 Head):
 
-| Class | AP@0.5 | AP@0.5:0.95 |
-|-------|--------|-------------|
-| Human | 0.4531 | 0.1985 |
-| Car | 0.7864 | 0.5279 |
-| Overall | 0.6197 | 0.3632 |
+| Class | Optimized AP@0.5 | P2 Head AP@0.5 | Optimized AP@0.5:0.95 | P2 Head AP@0.5:0.95 |
+|-------|------------------|----------------|-----------------------|---------------------|
+| Human | 0.4531 | 0.3761 | 0.1985 | 0.1591 |
+| Car | 0.7864 | 0.7632 | 0.5279 | 0.4830 |
+| Overall | 0.6197 | 0.5696 | 0.3632 | 0.3211 |
 
 ---
 

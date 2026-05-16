@@ -55,6 +55,22 @@ RUNS = [
             "pretrained": True,
         },
     },
+    {
+        "name": "p2-head-1280px",
+        "csv": ROOT / "results/p2_head_1280/training_log.csv",
+        "weights": ROOT / "weights/p2_head_1280/best.pt",
+        "config": {
+            "model": "YOLOv11m-P2 (custom)",
+            "dataset": "VisDrone 2019 DET (2-class filtered)",
+            "imgsz": 1280,
+            "epochs": 65,
+            "batch_size": 2,
+            "optimizer": "AdamW",
+            "lr": 0.001,
+            "classes": ["Human", "Car"],
+            "pretrained": "Backbone only",
+        },
+    },
 ]
 
 # Column mapping: CSV column name → clean W&B metric name
