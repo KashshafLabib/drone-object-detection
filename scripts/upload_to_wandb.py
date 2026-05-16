@@ -12,7 +12,6 @@ logs them as proper W&B runs, then attaches the model weights as artifacts.
 from pathlib import Path
 
 import pandas as pd
-
 import wandb
 
 # ── Configuration ────────────────────────────────────────────
