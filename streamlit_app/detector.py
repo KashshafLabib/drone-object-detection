@@ -5,21 +5,20 @@ Supports both standard whole-image inference and SAHI (Slicing Aided Hyper
 Inference) for improved small-object recall in aerial imagery.
 """
 
-import cv2
-import time
-import tempfile
 import os
-import numpy as np
+import tempfile
+import time
 from collections import defaultdict
+
+import cv2
+from config import CLASS_COLORS_BGR, CLASS_NAMES
 from ultralytics import YOLO
-
-from config import CLASS_NAMES, CLASS_COLORS_BGR
-
 
 # ── SAHI availability guard ───────────────────────────────────
 try:
     from sahi import AutoDetectionModel
     from sahi.predict import get_sliced_prediction
+
     _SAHI_AVAILABLE = True
 except ImportError:
     _SAHI_AVAILABLE = False
@@ -82,16 +81,30 @@ def detect_image(model, image_bgr, conf, iou, imgsz):
         # Draw label background and text
         label = f"{cls_name} {conf_val:.2f}"
         label_size, _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 1)
-        cv2.rectangle(annotated, (x1, y1 - label_size[1] - 8),
-                      (x1 + label_size[0] + 4, y1), color, -1)
-        cv2.putText(annotated, label, (x1 + 2, y1 - 4),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+        cv2.rectangle(
+            annotated,
+            (x1, y1 - label_size[1] - 8),
+            (x1 + label_size[0] + 4, y1),
+            color,
+            -1,
+        )
+        cv2.putText(
+            annotated,
+            label,
+            (x1 + 2, y1 - 4),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.5,
+            (255, 255, 255),
+            1,
+        )
 
-        detections.append({
-            "class": cls_name,
-            "confidence": conf_val,
-            "bbox": [x1, y1, x2, y2],
-        })
+        detections.append(
+            {
+                "class": cls_name,
+                "confidence": conf_val,
+                "bbox": [x1, y1, x2, y2],
+            }
+        )
 
     # Draw count overlay on top-left corner
     _draw_count_overlay(annotated, human_count, car_count)
@@ -106,8 +119,7 @@ def detect_image(model, image_bgr, conf, iou, imgsz):
     }
 
 
-def track_video(model, video_path, conf, iou, imgsz, tracker_type,
-                on_progress=None):
+def track_video(model, video_path, conf, iou, imgsz, tracker_type, on_progress=None):
     """
     Run multi-object tracking on a video file.
 
@@ -134,8 +146,7 @@ def track_video(model, video_path, conf, iou, imgsz, tracker_type,
 
     # Prepare output video writer
     output_path = os.path.join(
-        tempfile.gettempdir(),
-        f"tracked_{tracker_type.replace('.yaml', '')}.mp4"
+        tempfile.gettempdir(), f"tracked_{tracker_type.replace('.yaml', '')}.mp4"
     )
     fourcc = cv2.VideoWriter_fourcc(*"mp4v")
     writer = cv2.VideoWriter(output_path, fourcc, fps, (w, h))
@@ -190,16 +201,33 @@ def track_video(model, video_path, conf, iou, imgsz, tracker_type,
                 else:
                     label = f"{cls_name} {conf_val:.2f}"
 
-                label_size, _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.45, 1)
-                cv2.rectangle(annotated, (x1, y1 - label_size[1] - 8),
-                              (x1 + label_size[0] + 4, y1), color, -1)
-                cv2.putText(annotated, label, (x1 + 2, y1 - 4),
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.45, (255, 255, 255), 1)
+                label_size, _ = cv2.getTextSize(
+                    label, cv2.FONT_HERSHEY_SIMPLEX, 0.45, 1
+                )
+                cv2.rectangle(
+                    annotated,
+                    (x1, y1 - label_size[1] - 8),
+                    (x1 + label_size[0] + 4, y1),
+                    color,
+                    -1,
+                )
+                cv2.putText(
+                    annotated,
+                    label,
+                    (x1 + 2, y1 - 4),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.45,
+                    (255, 255, 255),
+                    1,
+                )
 
         # Draw tracking overlay with cumulative counts
         _draw_tracking_overlay(
-            annotated, frame_idx + 1, total_frames,
-            frame_humans, frame_cars,
+            annotated,
+            frame_idx + 1,
+            total_frames,
+            frame_humans,
+            frame_cars,
             len(unique_ids.get(0, set())),
             len(unique_ids.get(1, set())),
         )
@@ -227,12 +255,17 @@ def track_video(model, video_path, conf, iou, imgsz, tracker_type,
     }
 
 
-
 # ── SAHI Inference ───────────────────────────────────────────
 
+
 def detect_image_sahi(
-    model_path, image_bgr, conf, iou, imgsz,
-    slice_size=640, overlap_ratio=0.2,
+    model_path,
+    image_bgr,
+    conf,
+    iou,
+    imgsz,
+    slice_size=640,
+    overlap_ratio=0.2,
 ):
     """
     Run SAHI sliced inference on a single image for improved small object recall.
@@ -259,9 +292,7 @@ def detect_image_sahi(
         ImportError: If the `sahi` package is not installed.
     """
     if not _SAHI_AVAILABLE:
-        raise ImportError(
-            "sahi is not installed. Run: pip install sahi"
-        )
+        raise ImportError("sahi is not installed. Run: pip install sahi")
 
     # Save image to a temporary file — SAHI's get_sliced_prediction
     # accepts a file path or PIL image; a temp file avoids PIL dependency.
@@ -272,7 +303,7 @@ def detect_image_sahi(
     try:
         # Build an AutoDetectionModel around the same weights
         detection_model = AutoDetectionModel.from_pretrained(
-            model_type="yolov8",   # compatible with YOLOv11 via ultralytics
+            model_type="yolov8",  # compatible with YOLOv11 via ultralytics
             model_path=model_path,
             confidence_threshold=conf,
             device="cuda:0" if _cuda_available() else "cpu",
@@ -303,7 +334,7 @@ def detect_image_sahi(
     for pred in result.object_prediction_list:
         cls_id = pred.category.id
         conf_val = pred.score.value
-        bbox = pred.bbox.to_xyxy()          # [x1, y1, x2, y2] floats
+        bbox = pred.bbox.to_xyxy()  # [x1, y1, x2, y2] floats
         x1, y1, x2, y2 = map(int, bbox)
 
         cls_name = CLASS_NAMES.get(cls_id, f"Class {cls_id}")
@@ -324,18 +355,26 @@ def detect_image_sahi(
             annotated,
             (x1, y1 - label_size[1] - 8),
             (x1 + label_size[0] + 4, y1),
-            color, -1,
+            color,
+            -1,
         )
         cv2.putText(
-            annotated, label, (x1 + 2, y1 - 4),
-            cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1,
+            annotated,
+            label,
+            (x1 + 2, y1 - 4),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.5,
+            (255, 255, 255),
+            1,
         )
 
-        detections.append({
-            "class": cls_name,
-            "confidence": conf_val,
-            "bbox": [x1, y1, x2, y2],
-        })
+        detections.append(
+            {
+                "class": cls_name,
+                "confidence": conf_val,
+                "bbox": [x1, y1, x2, y2],
+            }
+        )
 
     # Draw the same count overlay used by standard inference
     _draw_count_overlay(annotated, human_count, car_count)
@@ -354,6 +393,7 @@ def _cuda_available():
     """Return True if a CUDA-capable GPU is available via PyTorch."""
     try:
         import torch
+
         return torch.cuda.is_available()
     except ImportError:
         return False
@@ -361,20 +401,31 @@ def _cuda_available():
 
 # ── Private Helpers ───────────────────────────────────────────
 
+
 def _draw_count_overlay(frame, human_count, car_count):
     """Draw a count summary overlay on the top-left corner of a frame."""
     y = 30
-    for text in [f"Humans: {human_count}", f"Cars: {car_count}",
-                 f"Total: {human_count + car_count}"]:
+    for text in [
+        f"Humans: {human_count}",
+        f"Cars: {car_count}",
+        f"Total: {human_count + car_count}",
+    ]:
         cv2.rectangle(frame, (5, y - 20), (200, y + 5), (0, 0, 0), -1)
-        cv2.putText(frame, text, (10, y),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.65, (255, 255, 255), 2)
+        cv2.putText(
+            frame, text, (10, y), cv2.FONT_HERSHEY_SIMPLEX, 0.65, (255, 255, 255), 2
+        )
         y += 30
 
 
-def _draw_tracking_overlay(frame, current_frame, total_frames,
-                           frame_humans, frame_cars,
-                           cumul_humans, cumul_cars):
+def _draw_tracking_overlay(
+    frame,
+    current_frame,
+    total_frames,
+    frame_humans,
+    frame_cars,
+    cumul_humans,
+    cumul_cars,
+):
     """Draw a tracking info overlay on the top-left corner of a frame."""
     lines = [
         f"Frame {current_frame}/{total_frames}",
@@ -386,6 +437,7 @@ def _draw_tracking_overlay(frame, current_frame, total_frames,
     y = 25
     for line in lines:
         cv2.rectangle(frame, (5, y - 16), (280, y + 4), (0, 0, 0), -1)
-        cv2.putText(frame, line, (10, y),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+        cv2.putText(
+            frame, line, (10, y), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1
+        )
         y += 24

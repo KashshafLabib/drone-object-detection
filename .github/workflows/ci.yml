@@ -1,0 +1,113 @@
+# ─────────────────────────────────────────────────────────────
+# CI Pipeline — Drone Detection and Counting System
+# ─────────────────────────────────────────────────────────────
+# Triggers on every push/PR to main.
+# Jobs:
+#   1. lint        — Code quality checks with Ruff
+#   2. smoke-test  — Verify all modules import cleanly
+#   3. docker      — Verify the Streamlit app Docker image builds
+# ─────────────────────────────────────────────────────────────
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  # ── Job 1: Lint ────────────────────────────────────────────
+  lint:
+    name: Lint (Ruff)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Install Ruff
+        run: pip install ruff
+
+      - name: Run Ruff linter
+        run: ruff check streamlit_app/ scripts/ --output-format=github
+
+      - name: Run Ruff formatter check
+        run: ruff format --check streamlit_app/ scripts/
+
+  # ── Job 2: Smoke Test ─────────────────────────────────────
+  smoke-test:
+    name: Smoke Test (Import Check)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Install dependencies
+        run: pip install -r streamlit_app/requirements.txt
+
+      - name: Verify module imports
+        working-directory: streamlit_app
+        run: |
+          python -c "
+          import config
+          print('✅ config imported')
+
+          import components
+          print('✅ components imported')
+
+          import styles
+          print('✅ styles imported')
+
+          import detector
+          print('✅ detector imported')
+
+          # Verify config values are sane
+          assert config.CLASS_NAMES == {0: 'Human', 1: 'Car'}
+          assert config.DEFAULT_CONF == 0.25
+          assert config.DEFAULT_IOU == 0.45
+          assert len(config.MODEL_SEARCH_PATHS) > 0
+          print('✅ config values validated')
+
+          # Verify SAHI availability check works
+          assert isinstance(detector.is_sahi_available(), bool)
+          print('✅ SAHI availability check works')
+
+          print()
+          print('All smoke tests passed.')
+          "
+
+      - name: Verify W&B upload script syntax
+        run: python -c "import py_compile; py_compile.compile('scripts/upload_to_wandb.py', doraise=True); print('✅ upload_to_wandb.py compiles')"
+
+  # ── Job 3: Docker Build ───────────────────────────────────
+  docker:
+    name: Docker Build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./streamlit_app
+          push: false
+          tags: drone-detection:ci-${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

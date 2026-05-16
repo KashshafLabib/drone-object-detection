@@ -23,7 +23,7 @@ TRACKER_OPTIONS = ["bytetrack.yaml", "botsort.yaml"]
 MODEL_SEARCH_PATHS = [
     "weights/optimized_1280/best.pt",
     "weights/baseline_640/best.pt",
-    "weights/best.pt",               # Docker: -v /path/to/best.pt:/app/weights/best.pt
+    "weights/best.pt",  # Docker: -v /path/to/best.pt:/app/weights/best.pt
     "best.pt",
 ]
 

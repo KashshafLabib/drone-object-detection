@@ -175,3 +175,6 @@ yarn-error.log*
 
 # --- Docker (optional) ---
 *.env.docker
+
+# --- W&B local run logs ---
+wandb/

@@ -1,5 +1,6 @@
 # Drone Human Detection and Counting System
 
+[![CI](https://github.com/KashshafLabib/drone-object-detection/actions/workflows/ci.yml/badge.svg)](https://github.com/KashshafLabib/drone-object-detection/actions/workflows/ci.yml)
 [![W&B](https://img.shields.io/badge/Weights_&_Biases-dashboard-yellow?logo=weightsandbiases)](https://wandb.ai/labibkashshaf-islamic-university-of-technology/drone-object-detection)
 
 An end-to-end computer vision pipeline for detecting humans and cars in drone/aerial imagery, counting total humans per frame, and visualizing results. Built on the VisDrone 2019 dataset using YOLOv11 with architectural modifications for small object detection.

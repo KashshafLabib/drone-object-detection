@@ -8,24 +8,37 @@ Usage:
     streamlit run app.py
 """
 
-import streamlit as st
-import cv2
-import numpy as np
-import tempfile
 import os
+import tempfile
 from pathlib import Path
 
-from config import (
-    DEFAULT_CONF, DEFAULT_IOU, DEFAULT_IMGSZ, IMGSZ_OPTIONS,
-    TRACKER_OPTIONS, CLASS_COLORS_HEX, find_model_path,
-)
-from detector import load_model, detect_image, detect_image_sahi, track_video, is_sahi_available
-from styles import get_css
+import cv2
+import numpy as np
+import streamlit as st
 from components import (
-    metric_card, detection_table, sidebar_section_title,
-    section_divider, placeholder_message,
+    detection_table,
+    metric_card,
+    placeholder_message,
+    section_divider,
+    sidebar_section_title,
 )
-
+from config import (
+    CLASS_COLORS_HEX,
+    DEFAULT_CONF,
+    DEFAULT_IMGSZ,
+    DEFAULT_IOU,
+    IMGSZ_OPTIONS,
+    TRACKER_OPTIONS,
+    find_model_path,
+)
+from detector import (
+    detect_image,
+    detect_image_sahi,
+    is_sahi_available,
+    load_model,
+    track_video,
+)
+from styles import get_css
 
 # ── Page Configuration ───────────────────────────────────────
 st.set_page_config(
@@ -102,7 +115,9 @@ def render_sidebar():
 
         conf = st.slider("Confidence threshold", 0.05, 0.95, DEFAULT_CONF, 0.05)
         iou = st.slider("IoU threshold (NMS)", 0.1, 0.95, DEFAULT_IOU, 0.05)
-        imgsz = st.select_slider("Input resolution", options=IMGSZ_OPTIONS, value=DEFAULT_IMGSZ)
+        imgsz = st.select_slider(
+            "Input resolution", options=IMGSZ_OPTIONS, value=DEFAULT_IMGSZ
+        )
 
         section_divider()
         sidebar_section_title("SAHI — SLICED INFERENCE")
@@ -144,25 +159,38 @@ def render_sidebar():
         sidebar_section_title("TRACKING")
 
         tracker = st.selectbox(
-            "Tracker", TRACKER_OPTIONS,
+            "Tracker",
+            TRACKER_OPTIONS,
             format_func=lambda x: x.replace(".yaml", "").upper(),
         )
 
         section_divider()
         sidebar_section_title("ABOUT")
-        st.markdown("""
-        **Architecture**: YOLOv11m  
-        **Classes**: Human, Car  
-        **Dataset**: VisDrone 2019 DET  
-        **Training**: 1280px, AdamW, 86 epochs
-        """)
+        st.markdown(
+            "**Architecture**: YOLOv11m<br>"
+            "**Classes**: Human, Car<br>"
+            "**Dataset**: VisDrone 2019 DET<br>"
+            "**Training**: 1280px, AdamW, 86 epochs",
+            unsafe_allow_html=True,
+        )
 
-    return model, active_path, conf, iou, imgsz, tracker, use_sahi, sahi_slice, sahi_overlap
+    return (
+        model,
+        active_path,
+        conf,
+        iou,
+        imgsz,
+        tracker,
+        use_sahi,
+        sahi_slice,
+        sahi_overlap,
+    )
 
 
 # ── Image Detection Page ───────────────────────────────────────────
-def render_image_tab(model, model_path, conf, iou, imgsz,
-                    use_sahi, sahi_slice, sahi_overlap):
+def render_image_tab(
+    model, model_path, conf, iou, imgsz, use_sahi, sahi_slice, sahi_overlap
+):
     """Render the image detection tab."""
     uploaded = st.file_uploader(
         "Upload a drone/aerial image",
@@ -171,9 +199,7 @@ def render_image_tab(model, model_path, conf, iou, imgsz,
     )
 
     if uploaded is None:
-        placeholder_message(
-            "Upload a drone or aerial image to begin detection."
-        )
+        placeholder_message("Upload a drone or aerial image to begin detection.")
         return
 
     # Read image
@@ -192,7 +218,11 @@ def render_image_tab(model, model_path, conf, iou, imgsz,
     with st.spinner(spinner_msg):
         if use_sahi:
             annotated_rgb, stats = detect_image_sahi(
-                model_path, image_bgr, conf, iou, imgsz,
+                model_path,
+                image_bgr,
+                conf,
+                iou,
+                imgsz,
                 slice_size=sahi_slice,
                 overlap_ratio=sahi_overlap,
             )
@@ -288,8 +318,8 @@ def render_video_tab(model_path, conf, iou, imgsz, tracker):
         est_time = total_frames * 0.8
         st.markdown(
             f'<div style="color:#8892A0; padding:0.5rem;">'
-            f'Estimated: ~{est_time:.0f}s on CPU ({total_frames} frames). '
-            f'Use 640px for faster processing.</div>',
+            f"Estimated: ~{est_time:.0f}s on CPU ({total_frames} frames). "
+            f"Use 640px for faster processing.</div>",
             unsafe_allow_html=True,
         )
 
@@ -299,6 +329,7 @@ def render_video_tab(model_path, conf, iou, imgsz, tracker):
 
         # Fresh model instance for clean tracker state
         from detector import load_model as _load
+
         tracking_model = _load(model_path)
 
         def on_progress(frame, total, elapsed, eta):
@@ -309,7 +340,12 @@ def render_video_tab(model_path, conf, iou, imgsz, tracker):
             )
 
         output_path, stats = track_video(
-            tracking_model, temp_path, conf, iou, imgsz, tracker,
+            tracking_model,
+            temp_path,
+            conf,
+            iou,
+            imgsz,
+            tracker,
             on_progress=on_progress,
         )
 
@@ -349,6 +385,7 @@ def render_video_tab(model_path, conf, iou, imgsz, tracker):
         # Per-frame chart
         with st.expander("Per-Frame Detection Counts"):
             import pandas as pd
+
             df = pd.DataFrame(stats["frame_counts"])
             df.index.name = "Frame"
             st.line_chart(df, color=[CLASS_COLORS_HEX[0], CLASS_COLORS_HEX[1]])
@@ -362,7 +399,9 @@ def render_video_tab(model_path, conf, iou, imgsz, tracker):
 
 # ── Main ────────────────────────────────────────────────────
 def main():
-    model, model_path, conf, iou, imgsz, tracker, use_sahi, sahi_slice, sahi_overlap = render_sidebar()
+    model, model_path, conf, iou, imgsz, tracker, use_sahi, sahi_slice, sahi_overlap = (
+        render_sidebar()
+    )
 
     # Header
     st.markdown(
@@ -371,18 +410,19 @@ def main():
     )
     st.markdown(
         '<div class="sub-header">'
-        'Detect humans and cars in aerial drone imagery. Upload an image for '
-        'instant detection and counting, or upload a video for multi-object '
-        'tracking with unique ID assignment.'
-        '</div>',
+        "Detect humans and cars in aerial drone imagery. Upload an image for "
+        "instant detection and counting, or upload a video for multi-object "
+        "tracking with unique ID assignment."
+        "</div>",
         unsafe_allow_html=True,
     )
 
     tab_image, tab_video = st.tabs(["IMAGE DETECTION", "VIDEO TRACKING"])
 
     with tab_image:
-        render_image_tab(model, model_path, conf, iou, imgsz,
-                         use_sahi, sahi_slice, sahi_overlap)
+        render_image_tab(
+            model, model_path, conf, iou, imgsz, use_sahi, sahi_slice, sahi_overlap
+        )
 
     with tab_video:
         render_video_tab(model_path, conf, iou, imgsz, tracker)

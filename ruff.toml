@@ -1,0 +1,22 @@
+# Ruff configuration for the Drone Detection project
+
+[lint]
+select = [
+    "E",    # pycodestyle errors
+    "W",    # pycodestyle warnings
+    "F",    # pyflakes
+    "I",    # isort (import sorting)
+    "UP",   # pyupgrade
+]
+ignore = [
+    "E501",  # line too long — handled by formatter
+]
+
+[lint.per-file-ignores]
+# Allow star imports in __init__ files
+"__init__.py" = ["F401", "F403"]
+
+[format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "auto"

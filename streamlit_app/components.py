@@ -33,14 +33,14 @@ def detection_table(detections):
     """
     html = (
         '<table class="det-table">'
-        '<tr><th>#</th><th>Class</th><th>Confidence</th><th>Bounding Box</th></tr>'
+        "<tr><th>#</th><th>Class</th><th>Confidence</th><th>Bounding Box</th></tr>"
     )
     for i, det in enumerate(detections):
         bbox = det["bbox"]
         bbox_str = f"({bbox[0]}, {bbox[1]}) - ({bbox[2]}, {bbox[3]})"
         html += (
-            f'<tr><td>{i + 1}</td><td>{det["class"]}</td>'
-            f'<td>{det["confidence"]:.3f}</td><td>{bbox_str}</td></tr>'
+            f"<tr><td>{i + 1}</td><td>{det['class']}</td>"
+            f"<td>{det['confidence']:.3f}</td><td>{bbox_str}</td></tr>"
         )
     html += "</table>"
     st.markdown(html, unsafe_allow_html=True)
