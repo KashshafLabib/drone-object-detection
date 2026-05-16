@@ -84,6 +84,8 @@ Top resolutions: 1400×1050 (2,772 images), 1400×788 (2,232), 1360×765 (1,318)
 
 #### Class Distribution
 
+![Class distribution across all 10 VisDrone categories](assets/class%20distribution%20bar%20chart.png)
+
 | Class | ID | Total | Train % | Val % | Test % | Target |
 |-------|----|-------|---------|-------|--------|--------|
 | Car | 3 | 187,005 | 42.21% | 36.29% | 37.38% | ✅ |
@@ -102,6 +104,8 @@ Target classes (Pedestrian, People, Car) account for 73.2% of all training annot
 #### Small Object Problem (Critical Finding)
 
 This is the dominant challenge in the dataset. The vast majority of human annotations are extremely small by standard detection benchmarks:
+
+![Bounding box size distribution — most human annotations fall in the COCO-small category](assets/bounding%20box%20size%20distribution.png)
 
 | Class | Small (<32×32 px) | Medium (32–96 px) | Large (>96 px) |
 |-------|-------------------|--------------------|----------------|
@@ -122,6 +126,8 @@ Tiny object breakdown for pedestrians: 27.0% have width < 8 px, 62.5% < 16 px, 9
 #### Object Density
 
 Images contain up to 902 annotated objects, with 703 training images exceeding 100 objects. Mean density is 53 objects per image in the training split.
+
+![Object density histogram across training images](assets/object%20density%20histogram.png)
 
 | Split | Min | Max | Mean | Median | >100 objects | >200 objects |
 |-------|-----|-----|------|--------|--------------|--------------|
@@ -171,6 +177,16 @@ Image resolution has negligible correlation with object count (megapixels vs tot
 | Unknown class IDs | 0 |
 
 Only 6 problematic annotations out of 457,066 (0.001%). The dataset is clean and ready for training without corrections.
+
+### Sample Images
+
+<p align="center">
+  <img src="assets/sample%20annotated%20image%20dense.png" width="32%" alt="Dense scene with many overlapping objects">
+  <img src="assets/sample%20annotated%20image%20human%20heavy.png" width="32%" alt="Human-heavy scene">
+  <img src="assets/sample%20annotated%20image%20sparse.png" width="32%" alt="Sparse scene with few objects">
+</p>
+
+*Left to right: dense scene (high object count), human-heavy scene, sparse scene. Red = Human, Green = Car.*
 
 ### Preprocessing Pipeline
 
@@ -286,6 +302,8 @@ Pretrained YOLOv11m backbone weights are transferred. The new P2 head layers are
 
 The optimized model at 1280 px achieved substantial improvements across all metrics. The largest gain was in recall (+13.3 percentage points), directly addressing the small object miss rate identified in the EDA.
 
+![Baseline vs Optimized training comparison — mAP, precision, recall, and loss curves](assets/baseline%20vs%20optimised%20training%20comparison.png)
+
 Key observations:
 - Training and validation losses tracked closely throughout, indicating no overfitting.
 - The baseline model was still improving at epoch 50, confirming room for additional training.
@@ -328,6 +346,8 @@ To address the small object detection gap, SAHI (Slicing Aided Hyper Inference) 
 
 This avoids downscaling the full image and preserves fine spatial detail for tiny objects. A 13 px pedestrian remains 13 px within its tile rather than being compressed further during whole-image resize.
 
+![Standard inference vs SAHI — SAHI recovers significantly more small human detections](assets/standard%20vs%20sahi%20camparison.png)
+
 The webapp exposes three SAHI controls:
 - **Enable/disable toggle** — switches between standard and sliced inference.
 - **Tile size** — configurable from 320 to 800 px.
@@ -360,6 +380,8 @@ The tracking pipeline processes uploaded drone/aerial videos frame-by-frame and 
 
 Unlike per-frame detection counting, the tracking-based count uses set-based accumulation of track IDs across all frames. This provides a more accurate total count by deduplicating objects that appear in multiple frames.
 
+![ByteTrack vs BotSORT — per-frame human count comparison](assets/bytetrack%20vs%20botsort%20per%20frame%20human%20count.png)
+
 ---
 
 ## Task 05: Evaluation and Visualization
@@ -367,6 +389,14 @@ Unlike per-frame detection counting, the tracking-based count uses set-based acc
 ### Prediction Outputs
 
 Detection visualizations are generated for sample test images showing bounding boxes, class labels, confidence scores, and per-image human/car counts. Side-by-side comparisons between standard inference and SAHI-enhanced inference demonstrate the improvement in small object recall.
+
+![Detection on test sample — bounding boxes with class labels and count overlay](assets/detection%20on%20test%20sample.png)
+
+### Web Application
+
+A Streamlit-based web interface provides an interactive environment for image detection, SAHI inference, and video tracking with configurable parameters.
+
+![Streamlit webapp — image detection tab with metric cards and side-by-side view](assets/streamlit%20frontend.png)
 
 ### Counting Accuracy
 
@@ -400,30 +430,32 @@ Drone Object Detection/
 │
 ├── README.md
 │
+├── assets/                                        # Images embedded in this README
+│
 ├── eda/
-│   ├── drone-object-detection-eda.ipynb       # Complete executed EDA notebook (24 analysis cells)
-│   └── eda_results.md                         # Structured summary of all EDA findings
+│   ├── drone-object-detection-eda.ipynb            # Complete executed EDA notebook (24 analysis cells)
+│   └── eda_results.md                              # Structured summary of all EDA findings
 │
 ├── preprocess and model training/
 │   └── drone-object-detection-preprocessing-and-training.ipynb
-│                                              # Preprocessing, training (baseline + optimized + P2),
-│                                              # inference, counting, SAHI, and evaluation
+│                                                   # Preprocessing, training (baseline + optimized + P2),
+│                                                   # inference, counting, SAHI, and evaluation
 │
 ├── weights and results/
 │   ├── baseline 640/
-│   │   ├── best.pt                            # Baseline model weights (YOLOv11m, 640px)
-│   │   └── results.csv                        # Epoch-by-epoch training metrics (50 epochs)
+│   │   ├── best.pt                                 # Baseline model weights (YOLOv11m, 640px)
+│   │   └── results.csv                             # Epoch-by-epoch training metrics (50 epochs)
 │   └── optimised 1280/
-│       ├── best.pt                            # Optimized model weights (YOLOv11m, 1280px)
-│       └── results.csv                        # Epoch-by-epoch training metrics (86 epochs)
+│       ├── best.pt                                 # Optimized model weights (YOLOv11m, 1280px)
+│       └── results.csv                             # Epoch-by-epoch training metrics (86 epochs)
 │
 └── webapp/
-    ├── app.py                                 # Streamlit application (image detection + video tracking)
-    ├── detector.py                            # Detection, SAHI inference, and tracking logic
-    ├── config.py                              # Constants, class definitions, model search paths
-    ├── components.py                          # Reusable Streamlit UI components
-    ├── styles.py                              # Custom CSS for dark-mode UI
-    └── requirements.txt                       # Python dependencies for the webapp
+    ├── app.py                                      # Streamlit application (image detection + video tracking)
+    ├── detector.py                                 # Detection, SAHI inference, and tracking logic
+    ├── config.py                                   # Constants, class definitions, model search paths
+    ├── components.py                               # Reusable Streamlit UI components
+    ├── styles.py                                   # Custom CSS for dark-mode UI
+    └── requirements.txt                            # Python dependencies for the webapp
 ```
 
 ---
