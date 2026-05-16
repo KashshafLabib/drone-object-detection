@@ -1,0 +1,35 @@
+# Virtual environments
+venv/
+.venv/
+ENV/
+
+# Python caches
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# IDE / OS
+.idea/
+.vscode/
+*.swp
+*.swo
+Thumbs.db
+.DS_Store
+
+# Git
+.git/
+.gitignore
+
+# Docker
+Dockerfile
+.dockerignore
+docker-compose*.yml
+
+# Weights (mounted at runtime, not baked into image)
+*.pt
+*.pth
+*.onnx
+weights/
+
+# Logs
+*.log

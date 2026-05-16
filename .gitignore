@@ -104,6 +104,7 @@ visdrone*/
 *.7z
 
 # --- Model weights & exports ---
+# Note: project weights in weights/ are tracked via git add -f
 *.pt
 *.pth
 *.ckpt
@@ -117,7 +118,6 @@ visdrone*/
 *.keras
 *.mlmodel
 *.weights
-weights/
 checkpoints/
 saved_models/
 exports/

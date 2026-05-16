@@ -66,7 +66,7 @@ The dataset contains 10 object classes. For this project, only 3 are relevant to
 
 ### Exploratory Data Analysis
 
-A thorough EDA was conducted across 24 analysis cells covering dataset structure, class distributions, bounding box statistics, spatial distributions, annotation quality, and visual inspection. The full EDA notebook is available at `eda/drone-object-detection-eda.ipynb`, with a structured summary at `eda/eda_results.md`.
+A thorough EDA was conducted across 24 analysis cells covering dataset structure, class distributions, bounding box statistics, spatial distributions, annotation quality, and visual inspection. The full EDA notebook is available at `notebooks/01_eda.ipynb`, with a structured summary at `notebooks/eda_results.md`.
 
 Key findings from the analysis:
 
@@ -83,8 +83,6 @@ The dataset contains images at 11 distinct resolutions ranging from 480×360 to 
 Top resolutions: 1400×1050 (2,772 images), 1400×788 (2,232), 1360×765 (1,318), 2000×1500 (772). All splits have 100% image-label pairing with zero missing files.
 
 #### Class Distribution
-
-![Class distribution across all 10 VisDrone categories](assets/class%20distribution%20bar%20chart.png)
 
 | Class | ID | Total | Train % | Val % | Test % | Target |
 |-------|----|-------|---------|-------|--------|--------|
@@ -105,8 +103,6 @@ Target classes (Pedestrian, People, Car) account for 73.2% of all training annot
 
 This is the dominant challenge in the dataset. The vast majority of human annotations are extremely small by standard detection benchmarks:
 
-![Bounding box size distribution — most human annotations fall in the COCO-small category](assets/bounding%20box%20size%20distribution.png)
-
 | Class | Small (<32×32 px) | Medium (32–96 px) | Large (>96 px) |
 |-------|-------------------|--------------------|----------------|
 | Pedestrian | 82.2% | 17.4% | 0.4% |
@@ -126,8 +122,6 @@ Tiny object breakdown for pedestrians: 27.0% have width < 8 px, 62.5% < 16 px, 9
 #### Object Density
 
 Images contain up to 902 annotated objects, with 703 training images exceeding 100 objects. Mean density is 53 objects per image in the training split.
-
-![Object density histogram across training images](assets/object%20density%20histogram.png)
 
 | Split | Min | Max | Mean | Median | >100 objects | >200 objects |
 |-------|-----|-----|------|--------|--------------|--------------|
@@ -177,16 +171,6 @@ Image resolution has negligible correlation with object count (megapixels vs tot
 | Unknown class IDs | 0 |
 
 Only 6 problematic annotations out of 457,066 (0.001%). The dataset is clean and ready for training without corrections.
-
-### Sample Images
-
-<p align="center">
-  <img src="assets/sample%20annotated%20image%20dense.png" width="32%" alt="Dense scene with many overlapping objects">
-  <img src="assets/sample%20annotated%20image%20human%20heavy.png" width="32%" alt="Human-heavy scene">
-  <img src="assets/sample%20annotated%20image%20sparse.png" width="32%" alt="Sparse scene with few objects">
-</p>
-
-*Left to right: dense scene (high object count), human-heavy scene, sparse scene. Red = Human, Green = Car.*
 
 ### Preprocessing Pipeline
 
@@ -302,8 +286,6 @@ Pretrained YOLOv11m backbone weights are transferred. The new P2 head layers are
 
 The optimized model at 1280 px achieved substantial improvements across all metrics. The largest gain was in recall (+13.3 percentage points), directly addressing the small object miss rate identified in the EDA.
 
-![Baseline vs Optimized training comparison — mAP, precision, recall, and loss curves](assets/baseline%20vs%20optimised%20training%20comparison.png)
-
 Key observations:
 - Training and validation losses tracked closely throughout, indicating no overfitting.
 - The baseline model was still improving at epoch 50, confirming room for additional training.
@@ -346,8 +328,6 @@ To address the small object detection gap, SAHI (Slicing Aided Hyper Inference) 
 
 This avoids downscaling the full image and preserves fine spatial detail for tiny objects. A 13 px pedestrian remains 13 px within its tile rather than being compressed further during whole-image resize.
 
-![Standard inference vs SAHI — SAHI recovers significantly more small human detections](assets/standard%20vs%20sahi%20camparison.png)
-
 The webapp exposes three SAHI controls:
 - **Enable/disable toggle** — switches between standard and sliced inference.
 - **Tile size** — configurable from 320 to 800 px.
@@ -380,8 +360,6 @@ The tracking pipeline processes uploaded drone/aerial videos frame-by-frame and 
 
 Unlike per-frame detection counting, the tracking-based count uses set-based accumulation of track IDs across all frames. This provides a more accurate total count by deduplicating objects that appear in multiple frames.
 
-![ByteTrack vs BotSORT — per-frame human count comparison](assets/bytetrack%20vs%20botsort%20per%20frame%20human%20count.png)
-
 ---
 
 ## Task 05: Evaluation and Visualization
@@ -389,14 +367,6 @@ Unlike per-frame detection counting, the tracking-based count uses set-based acc
 ### Prediction Outputs
 
 Detection visualizations are generated for sample test images showing bounding boxes, class labels, confidence scores, and per-image human/car counts. Side-by-side comparisons between standard inference and SAHI-enhanced inference demonstrate the improvement in small object recall.
-
-![Detection on test sample — bounding boxes with class labels and count overlay](assets/detection%20on%20test%20sample.png)
-
-### Web Application
-
-A Streamlit-based web interface provides an interactive environment for image detection, SAHI inference, and video tracking with configurable parameters.
-
-![Streamlit webapp — image detection tab with metric cards and side-by-side view](assets/streamlit%20frontend.png)
 
 ### Counting Accuracy
 
@@ -426,36 +396,47 @@ Test set evaluation (optimized model):
 ## Project Structure
 
 ```
-Drone Object Detection/
+drone-object-detection/
 │
 ├── README.md
+├── requirements.txt                               # Python dependencies
 │
-├── assets/                                        # Images embedded in this README
+├── assets/                                        # README images and visualizations
+│   ├── training_curves.png
+│   ├── sahi_comparison.png
+│   ├── detection_sample.png
+│   └── ...
 │
-├── eda/
-│   ├── drone-object-detection-eda.ipynb            # Complete executed EDA notebook (24 analysis cells)
-│   └── eda_results.md                              # Structured summary of all EDA findings
+├── docs/
+│   └── assessment_brief.pdf                       # Assessment specification
 │
-├── preprocess and model training/
-│   └── drone-object-detection-preprocessing-and-training.ipynb
-│                                                   # Preprocessing, training (baseline + optimized + P2),
-│                                                   # inference, counting, SAHI, and evaluation
+├── notebooks/
+│   ├── 01_eda.ipynb                               # Exploratory data analysis (24 cells)
+│   ├── 02_preprocessing_and_training.ipynb        # Preprocessing, training, inference, SAHI
+│   └── eda_results.md                             # Structured summary of EDA findings
 │
-├── weights and results/
-│   ├── baseline 640/
-│   │   ├── best.pt                                 # Baseline model weights (YOLOv11m, 640px)
-│   │   └── results.csv                             # Epoch-by-epoch training metrics (50 epochs)
-│   └── optimised 1280/
-│       ├── best.pt                                 # Optimized model weights (YOLOv11m, 1280px)
-│       └── results.csv                             # Epoch-by-epoch training metrics (86 epochs)
+├── weights/
+│   ├── baseline_640/
+│   │   └── best.pt                                # Baseline model weights (YOLOv11m, 640px)
+│   └── optimized_1280/
+│       └── best.pt                                # Optimized model weights (YOLOv11m, 1280px)
 │
-└── webapp/
-    ├── app.py                                      # Streamlit application (image detection + video tracking)
-    ├── detector.py                                 # Detection, SAHI inference, and tracking logic
-    ├── config.py                                   # Constants, class definitions, model search paths
-    ├── components.py                               # Reusable Streamlit UI components
-    ├── styles.py                                   # Custom CSS for dark-mode UI
-    └── requirements.txt                            # Python dependencies for the webapp
+├── results/
+│   ├── baseline_640/
+│   │   └── training_log.csv                       # Epoch-by-epoch metrics (50 epochs)
+│   └── optimized_1280/
+│       └── training_log.csv                       # Epoch-by-epoch metrics (86 epochs)
+│
+└── streamlit_app/
+    ├── app.py                                     # Streamlit application entry point
+    ├── detector.py                                # Detection, SAHI inference, and tracking
+    ├── config.py                                  # Constants, class maps, model search paths
+    ├── components.py                              # Reusable UI components
+    ├── styles.py                                  # Custom dark-mode CSS
+    ├── requirements.txt                           # App-specific dependencies
+    ├── Dockerfile                                 # Container image definition
+    ├── .dockerignore                              # Docker build context exclusions
+    └── docker-compose.yml                         # One-command container launch
 ```
 
 ---
@@ -474,7 +455,7 @@ Drone Object Detection/
 ### Running the Web Application
 
 ```bash
-cd webapp
+cd streamlit_app
 python -m venv venv
 # Windows:
 .\venv\Scripts\activate
@@ -485,7 +466,30 @@ pip install -r requirements.txt
 streamlit run app.py
 ```
 
-The webapp will auto-detect model weights from `weights and results/optimised 1280/best.pt`. Alternatively, use the **Upload weights** option in the sidebar to load any `.pt` file directly through the browser.
+The app will auto-detect model weights from `weights/optimized_1280/best.pt`. Alternatively, use the **Upload weights** option in the sidebar to load any `.pt` file directly through the browser.
+
+### Running with Docker
+
+The Streamlit app can also be launched in a container with no local Python setup required.
+
+**Using Docker Compose (recommended):**
+
+```bash
+cd streamlit_app
+docker compose up --build
+```
+
+This mounts the project's `weights/` directory automatically. The app will be available at `http://localhost:8501`.
+
+**Using Docker directly:**
+
+```bash
+cd streamlit_app
+docker build -t drone-detection .
+docker run -p 8501:8501 -v ../weights:/app/weights:ro drone-detection
+```
+
+> **Note:** The Docker image uses CPU-only PyTorch to keep the image size manageable (~2.5 GB). For GPU inference, replace the base image with an NVIDIA CUDA image and install the GPU variant of PyTorch.
 
 ### Kaggle Reproduction
 
@@ -500,7 +504,7 @@ The webapp will auto-detect model weights from `weights and results/optimised 12
 ```python
 from ultralytics import YOLO
 
-model = YOLO('weights and results/optimised 1280/best.pt')
+model = YOLO('weights/optimized_1280/best.pt')
 results = model.predict(source='image.jpg', conf=0.25, iou=0.45, imgsz=1280)
 ```
 

@@ -19,15 +19,15 @@ IMGSZ_OPTIONS = [320, 480, 640, 960, 1280]
 # Tracker options
 TRACKER_OPTIONS = ["bytetrack.yaml", "botsort.yaml"]
 
-# Model search paths (relative to project root)
+# Model search paths (relative to project root and Docker mount)
 MODEL_SEARCH_PATHS = [
-    "weights and results/optimised 1280/best.pt",
-    "weights and results/baseline 640/best.pt",
-    "weights/best.pt",
+    "weights/optimized_1280/best.pt",
+    "weights/baseline_640/best.pt",
+    "weights/best.pt",               # Docker: -v /path/to/best.pt:/app/weights/best.pt
     "best.pt",
 ]
 
-# Project root (one level up from webapp/)
+# Project root (one level up from streamlit_app/)
 PROJECT_ROOT = Path(__file__).parent.parent
 
 

@@ -1,0 +1,11 @@
+services:
+  app:
+    build: .
+    container_name: drone-detection
+    ports:
+      - "8501:8501"
+    volumes:
+      # Mount your model weights directory into the container
+      # Edit the left side of the colon to point to your local weights folder
+      - ../weights:/app/weights:ro
+    restart: unless-stopped
