@@ -21,8 +21,8 @@ TRACKER_OPTIONS = ["bytetrack.yaml", "botsort.yaml"]
 
 # Model search paths (relative to project root)
 MODEL_SEARCH_PATHS = [
-    "kaggle_training/weights and results/optimised 1280/best.pt",
-    "kaggle_training/weights and results/baseline 640/best.pt",
+    "weights and results/optimised 1280/best.pt",
+    "weights and results/baseline 640/best.pt",
     "weights/best.pt",
     "best.pt",
 ]

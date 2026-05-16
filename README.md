@@ -28,6 +28,7 @@ This project implements a detection and counting pipeline for drone-captured aer
 - Counts total humans per image.
 - Visualizes detections with color-coded bounding boxes and count overlays.
 - Applies SAHI (Slicing Aided Hyper Inference) for improved small object detection.
+- Tracks objects across video frames using ByteTrack / BotSORT with unique ID assignment.
 - Introduces a custom P2 detection head architecture for tiny object recall.
 
 **Model**: YOLOv11m (Ultralytics)  
@@ -65,44 +66,111 @@ The dataset contains 10 object classes. For this project, only 3 are relevant to
 
 ### Exploratory Data Analysis
 
-A thorough EDA was conducted across 24 analysis cells covering dataset structure, class distributions, bounding box statistics, spatial distributions, annotation quality, and visual inspection. The full EDA notebook is available at `kaggle_eda/drone-object-detection-eda.ipynb`.
+A thorough EDA was conducted across 24 analysis cells covering dataset structure, class distributions, bounding box statistics, spatial distributions, annotation quality, and visual inspection. The full EDA notebook is available at `eda/drone-object-detection-eda.ipynb`, with a structured summary at `eda/eda_results.md`.
 
 Key findings from the analysis:
 
 #### Image Resolutions
 
-The dataset contains images at 11 distinct resolutions ranging from 480x360 to 2000x1500 pixels. The most common resolution is 1400x1050 (2,772 images). All splits have 100% image-label pairing with zero missing files.
+The dataset contains images at 11 distinct resolutions ranging from 480×360 to 2000×1500 pixels.
+
+| Split | Unique Resolutions | Width Range | Height Range | MP Range |
+|-------|--------------------|-------------|--------------|----------|
+| Train | 11 | 480–2000 | 360–1500 | 0.17–3.00 |
+| Val | 3 | 960–1920 | 540–1080 | 0.52–2.07 |
+| Test | 6 | 960–1920 | 540–1080 | 0.52–2.07 |
+
+Top resolutions: 1400×1050 (2,772 images), 1400×788 (2,232), 1360×765 (1,318), 2000×1500 (772). All splits have 100% image-label pairing with zero missing files.
 
 #### Class Distribution
 
-Target classes (Pedestrian, People, Car) account for 73.2% of all annotations in the training set. The remaining 26.8% belong to non-target vehicle classes.
+| Class | ID | Total | Train % | Val % | Test % | Target |
+|-------|----|-------|---------|-------|--------|--------|
+| Car | 3 | 187,005 | 42.21% | 36.29% | 37.38% | ✅ |
+| Pedestrian | 0 | 109,187 | 23.12% | 22.82% | 27.97% | ✅ |
+| Motor | 9 | 40,378 | 8.64% | 12.61% | 7.78% | ❌ |
+| People | 1 | 38,560 | 7.88% | 13.22% | 8.49% | ✅ |
+| Van | 4 | 32,702 | 7.27% | 5.10% | 7.68% | ❌ |
+| Truck | 5 | 16,284 | 3.75% | 1.94% | 3.54% | ❌ |
+| Bicycle | 2 | 13,069 | 3.05% | 3.32% | 1.73% | ❌ |
+| Bus | 8 | 9,117 | 1.73% | 0.65% | 3.91% | ❌ |
+| Tricycle | 6 | 6,387 | 1.40% | 2.70% | 0.71% | ❌ |
+| Awning-tri | 7 | 4,377 | 0.95% | 1.37% | 0.80% | ❌ |
 
-| Class | Train Count | Percentage |
-|-------|------------|------------|
-| Car | 144,867 | 42.2% |
-| Pedestrian | 79,337 | 23.1% |
-| People | 27,059 | 7.9% |
-| Other (7 classes) | 91,942 | 26.8% |
+Target classes (Pedestrian, People, Car) account for 73.2% of all training annotations. The Pedestrian:People ratio is approximately 3:1 across all splits.
 
 #### Small Object Problem (Critical Finding)
 
 This is the dominant challenge in the dataset. The vast majority of human annotations are extremely small by standard detection benchmarks:
 
-| Class | Small (<32x32 px) | Medium (32-96 px) | Large (>96 px) |
-|-------|-------------------|--------------------|--------------------|
+| Class | Small (<32×32 px) | Medium (32–96 px) | Large (>96 px) |
+|-------|-------------------|--------------------|----------------|
 | Pedestrian | 82.2% | 17.4% | 0.4% |
 | People | 86.9% | 12.7% | 0.4% |
 | Car | 48.2% | 43.5% | 8.2% |
 
-Median pixel dimensions: Pedestrian 13x25 px, People 13x20 px, Car 38x29 px. Approximately 27% of pedestrians have a width under 8 pixels and 4.2% have both dimensions under 8 pixels.
+Pixel dimension stats (train):
+
+| Class | W Mean | W Median | H Mean | H Median | Area Median |
+|-------|--------|----------|--------|----------|-------------|
+| Pedestrian | 16.2 px | 13.0 px | 30.7 px | 25.0 px | 315 px² |
+| People | 16.4 px | 13.0 px | 24.7 px | 20.0 px | 273 px² |
+| Car | 51.3 px | 38.0 px | 40.6 px | 29.0 px | 1,104 px² |
+
+Tiny object breakdown for pedestrians: 27.0% have width < 8 px, 62.5% < 16 px, 91.0% < 32 px. 4.2% have both dimensions < 8 px, making them effectively undetectable.
 
 #### Object Density
 
-Images contain up to 902 annotated objects, with 703 training images exceeding 100 objects. Mean density is 53 objects per image in the training split. 82.7% of training images contain both humans and cars.
+Images contain up to 902 annotated objects, with 703 training images exceeding 100 objects. Mean density is 53 objects per image in the training split.
+
+| Split | Min | Max | Mean | Median | >100 objects | >200 objects |
+|-------|-----|-----|------|--------|--------------|--------------|
+| Train | 1 | 902 | 53.0 | 42 | 703 | 80 |
+| Val | 1 | 317 | 70.7 | 65 | 107 | 8 |
+| Test | 1 | 461 | 46.6 | 36 | 127 | 29 |
+
+Human-car co-occurrence: 82.7% of training images contain both humans and cars, 5.2% contain humans only, 12.1% cars only.
+
+#### Aspect Ratios
+
+| Class | Mean W/H | Median W/H |
+|-------|----------|------------|
+| Pedestrian | 0.37 | 0.31 |
+| People | 0.45 | 0.40 |
+| Car | 2.92 | 0.83 |
+
+Pedestrians and people are consistently tall and narrow (W/H < 1). Cars have high variance due to diverse viewing angles.
+
+#### Same-Class IoU Overlap
+
+| Class | Overlapping Pairs | Mean IoU | >0.3 IoU | >0.5 IoU |
+|-------|-------------------|----------|----------|----------|
+| Pedestrian | 753 | 0.143 | 13.3% | 2.5% |
+| People | 121 | 0.221 | 34.7% | 11.6% |
+| Car | 1,831 | 0.131 | 10.5% | 2.1% |
+
+The People class has the highest overlap (34.7% pairs >0.3 IoU), indicating crowded groups that will challenge NMS.
+
+#### Spatial Distribution
+
+Objects are relatively uniformly distributed across image regions with a slight concentration toward the center, consistent with drone cameras pointing at areas of interest.
+
+#### Correlations
+
+Image resolution has negligible correlation with object count (megapixels vs total objects: 0.082, vs humans: -0.007, vs cars: 0.098). Resolution does not predict density.
 
 #### Annotation Quality
 
-Out of 457,066 annotations, only 6 were identified as problematic (1 zero-dimension box, 4 exact duplicates, 1 micro-area box). The dataset is clean and ready for training without annotation corrections.
+| Check | Result |
+|-------|--------|
+| Zero/negative dimensions | 1 box |
+| Out of bounds | 0 |
+| Covers >50% image | 0 |
+| Exact duplicates | 4 |
+| Micro boxes (area < 1e-6) | 1 |
+| Unknown class IDs | 0 |
+
+Only 6 problematic annotations out of 457,066 (0.001%). The dataset is clean and ready for training without corrections.
 
 ### Preprocessing Pipeline
 
@@ -113,7 +181,7 @@ The preprocessing stage transforms the 10-class VisDrone dataset into a focused 
 Pedestrian (class 0) and People (class 1) are merged into a single Human class (new class 0). Car (class 3) is remapped to new class 1. All other 7 classes are discarded.
 
 Rationale for merging Pedestrian and People:
-- Near-identical pixel dimensions (median 13x25 vs 13x20 px).
+- Near-identical pixel dimensions (median 13×25 vs 13×20 px).
 - Same aspect ratio profile (tall and narrow, W/H < 1).
 - 3:1 count ratio between the subclasses creates unnecessary imbalance.
 - Semantically identical for the counting task.
@@ -159,12 +227,12 @@ Establishes a performance floor with standard settings.
 | Parameter | Value |
 |-----------|-------|
 | Model | YOLOv11m (pretrained on COCO) |
-| Input resolution | 640 x 640 |
+| Input resolution | 640 × 640 |
 | Epochs | 50 |
 | Batch size | 16 |
 | Optimizer | AdamW |
-| Learning rate | 0.001 (cosine decay to 0.01x) |
-| Augmentation | Mosaic, MixUp (0.15), HSV jitter, horizontal flip, scale (0.5), rotation (5 deg) |
+| Learning rate | 0.001 (cosine decay to 0.01×) |
+| Augmentation | Mosaic, MixUp (0.15), HSV jitter, horizontal flip, scale (0.5), rotation (5°) |
 
 #### Phase 2: Optimized (1280 px)
 
@@ -173,7 +241,7 @@ Addresses the small object problem by doubling input resolution. At 1280 px, a 1
 | Parameter | Value |
 |-----------|-------|
 | Model | YOLOv11m (pretrained on COCO) |
-| Input resolution | 1280 x 1280 |
+| Input resolution | 1280 × 1280 |
 | Epochs | 100 (early stopped at 86) |
 | Batch size | 4 (reduced for GPU memory) |
 | Optimizer | AdamW |
@@ -183,7 +251,7 @@ Addresses the small object problem by doubling input resolution. At 1280 px, a 1
 
 #### Phase 3: P2 Detection Head (1280 px)
 
-A custom architectural modification adding a 4th detection head at stride 4. Standard YOLOv11 detects at strides 8, 16, and 32. The P2 head adds detection at stride 4, producing a 320x320 feature map at 1280 px input where each cell covers 4x4 pixels of the original image.
+A custom architectural modification adding a 4th detection head at stride 4. Standard YOLOv11 detects at strides 8, 16, and 32. The P2 head adds detection at stride 4, producing a 320×320 feature map at 1280 px input where each cell covers 4×4 pixels of the original image.
 
 This approach is inspired by the TPH-YOLOv5 paper (Zhu et al., 2021), which demonstrated that adding a P2 prediction head improves mAP by approximately 2% on drone-captured scenarios.
 
@@ -198,7 +266,7 @@ Pretrained YOLOv11m backbone weights are transferred. The new P2 head layers are
 | Parameter | Value |
 |-----------|-------|
 | Model | YOLOv11m-P2 (custom architecture) |
-| Input resolution | 1280 x 1280 |
+| Input resolution | 1280 × 1280 |
 | Epochs | 100 |
 | Batch size | 2 (further reduced for P2 memory overhead) |
 | Optimizer | AdamW |
@@ -234,8 +302,6 @@ Evaluated on the test-dev split (1,610 images) using the optimized (1280 px) mod
 
 The gap between validation (0.8265 mAP@0.5) and test (0.6197 mAP@0.5) reflects the greater diversity and difficulty of the test-dev split. The Human class AP remains the bottleneck due to the extreme prevalence of sub-32 px objects.
 
-Model weights are available via Google Drive: [Download Link (placeholder -- to be updated)]
-
 ---
 
 ## Task 03: Detection and Counting
@@ -252,21 +318,47 @@ The inference function accepts configurable confidence threshold (default 0.25) 
 
 ### Counting Logic
 
-Human counting is implemented as a direct summation of all detection boxes classified as Human (class 0) with confidence above the threshold. This is a frame-level count -- each detected bounding box increments the counter by one.
+Human counting is implemented as a direct summation of all detection boxes classified as Human (class 0) with confidence above the threshold. This is a frame-level count — each detected bounding box increments the counter by one.
 
 While simple, this approach is appropriate for single-image analysis. Limitations include potential double-counting of partially occluded individuals and missed counts for humans below the confidence threshold.
 
 ### SAHI Integration
 
-To address the small object detection gap, SAHI (Slicing Aided Hyper Inference) is integrated as an alternative inference mode. SAHI divides the input image into overlapping tiles (640x640 px with 20% overlap), runs detection independently on each tile at native resolution, then merges all detections back into the original coordinate space using NMS.
+To address the small object detection gap, SAHI (Slicing Aided Hyper Inference) is integrated as an alternative inference mode available via the web application's sidebar toggle. SAHI divides the input image into overlapping tiles (configurable size, default 640×640 px with 20% overlap), runs detection independently on each tile at native resolution, then merges all detections back into the original coordinate space using NMS.
 
 This avoids downscaling the full image and preserves fine spatial detail for tiny objects. A 13 px pedestrian remains 13 px within its tile rather than being compressed further during whole-image resize.
+
+The webapp exposes three SAHI controls:
+- **Enable/disable toggle** — switches between standard and sliced inference.
+- **Tile size** — configurable from 320 to 800 px.
+- **Overlap ratio** — 10% to 40% overlap between adjacent tiles.
 
 ---
 
 ## Task 04: Object Tracking (Bonus)
 
-*To be implemented.*
+### Tracking Implementation
+
+Multi-object tracking is implemented in the webapp's Video Tracking tab using Ultralytics' built-in tracker integration. The system supports two tracking algorithms:
+
+- **ByteTrack** — a simple, high-performance tracker that associates detections using both high and low confidence scores, improving tracking continuity for temporarily occluded objects.
+- **BotSORT** — combines motion (Kalman filter) and appearance (ReID) cues for more robust association in crowded scenes.
+
+### Tracking Features
+
+The tracking pipeline processes uploaded drone/aerial videos frame-by-frame and provides:
+
+- **Unique ID assignment** — each detected object receives a persistent track ID (e.g., `Human #14`, `Car #7`) that is maintained across frames.
+- **Per-frame counts** — current number of humans and cars visible in each frame.
+- **Cumulative unique counts** — total unique humans and cars seen across the entire video (using track ID sets).
+- **Tracking overlay** — each frame displays frame number, per-frame counts, and cumulative unique counts.
+- **Per-frame chart** — an expandable line chart showing human and car counts over time.
+- **Output video** — the annotated tracking video is available for download.
+- **Progress reporting** — real-time progress bar with elapsed time and ETA.
+
+### Unique Object Counting
+
+Unlike per-frame detection counting, the tracking-based count uses set-based accumulation of track IDs across all frames. This provides a more accurate total count by deduplicating objects that appear in multiple frames.
 
 ---
 
@@ -304,35 +396,34 @@ Test set evaluation (optimized model):
 ## Project Structure
 
 ```
-Drone Human Detection & Counting System/
-|
-|-- README.md
-|
-|-- kaggle_eda/
-|   |-- cell_01_setup_and_structure.py        # Dataset loading, path config, label parsing, resolution analysis
-|   |-- cell_02_class_distribution.py         # Class counts, target class focus, density analysis
-|   |-- cell_03_bbox_analysis.py              # Bounding box sizes (normalized and pixel), aspect ratios, COCO-style categories
-|   |-- cell_04_cooccurrence_and_overlap.py   # Class co-occurrence, IoU overlap, tiny object deep-dive
-|   |-- cell_05_visualizations.py             # Annotated sample images (dense, sparse, human-heavy, car-heavy)
-|   |-- cell_06_summary.py                    # Per-class statistics, correlation analysis, EDA summary
-|   |-- drone-object-detection-eda.ipynb      # Complete executed EDA notebook with outputs
-|   |-- eda_results.md                        # Structured summary of all EDA findings
-|
-|-- kaggle_training/
-|   |-- cell_01_preprocessing.py              # Label remapping, class filtering, data.yaml creation
-|   |-- cell_02_baseline_training.py          # YOLOv11m baseline training at 640 px
-|   |-- cell_03_optimized_training.py         # YOLOv11m optimized training at 1280 px, comparison
-|   |-- cell_04_inference_and_counting.py     # Detection, counting, test set evaluation, counting accuracy
-|   |-- cell_05_sahi_and_export.py            # SAHI sliced inference, side-by-side comparison, model export
-|   |-- cell_06_p2_head_training.py           # Custom P2 head YAML, architecture verification, P2 training
-|   |-- cell_07_sahi_evaluation.py            # SAHI batch evaluation with mAP metrics via torchmetrics
-|   |-- weights and results/
-|       |-- baseline 640/
-|       |   |-- best.pt                       # Baseline model weights
-|       |   |-- results.csv                   # Epoch-by-epoch training metrics
-|       |-- optimised 1280/
-|           |-- best.pt                       # Optimized model weights
-|           |-- results.csv                   # Epoch-by-epoch training metrics
+Drone Object Detection/
+│
+├── README.md
+│
+├── eda/
+│   ├── drone-object-detection-eda.ipynb       # Complete executed EDA notebook (24 analysis cells)
+│   └── eda_results.md                         # Structured summary of all EDA findings
+│
+├── preprocess and model training/
+│   └── drone-object-detection-preprocessing-and-training.ipynb
+│                                              # Preprocessing, training (baseline + optimized + P2),
+│                                              # inference, counting, SAHI, and evaluation
+│
+├── weights and results/
+│   ├── baseline 640/
+│   │   ├── best.pt                            # Baseline model weights (YOLOv11m, 640px)
+│   │   └── results.csv                        # Epoch-by-epoch training metrics (50 epochs)
+│   └── optimised 1280/
+│       ├── best.pt                            # Optimized model weights (YOLOv11m, 1280px)
+│       └── results.csv                        # Epoch-by-epoch training metrics (86 epochs)
+│
+└── webapp/
+    ├── app.py                                 # Streamlit application (image detection + video tracking)
+    ├── detector.py                            # Detection, SAHI inference, and tracking logic
+    ├── config.py                              # Constants, class definitions, model search paths
+    ├── components.py                          # Reusable Streamlit UI components
+    ├── styles.py                              # Custom CSS for dark-mode UI
+    └── requirements.txt                       # Python dependencies for the webapp
 ```
 
 ---
@@ -342,28 +433,42 @@ Drone Human Detection & Counting System/
 ### Requirements
 
 - Python 3.10+
-- PyTorch 2.0+ with CUDA support
+- PyTorch 2.0+ with CUDA support (CPU inference is supported but slower)
 - ultralytics >= 8.0
-- sahi
-- torchmetrics
-- numpy, pandas, matplotlib, seaborn, Pillow, PyYAML, tqdm
+- sahi >= 0.11
+- streamlit >= 1.30
+- numpy, pandas, opencv-python-headless, Pillow
+
+### Running the Web Application
+
+```bash
+cd webapp
+python -m venv venv
+# Windows:
+.\venv\Scripts\activate
+# Linux/macOS:
+source venv/bin/activate
+
+pip install -r requirements.txt
+streamlit run app.py
+```
+
+The webapp will auto-detect model weights from `weights and results/optimised 1280/best.pt`. Alternatively, use the **Upload weights** option in the sidebar to load any `.pt` file directly through the browser.
 
 ### Kaggle Reproduction
 
 1. Create a new Kaggle notebook with GPU (T4) acceleration.
 2. Add the [VisDrone dataset](https://www.kaggle.com/datasets/banuprasadb/visdrone-dataset) as input.
-3. Run the preprocessing cells from `cell_01_preprocessing.py` to create the filtered 2-class dataset.
+3. Run the preprocessing cells to create the filtered 2-class dataset.
 4. Run training cells in order. The baseline takes approximately 45 minutes; the optimized run takes 2-4 hours.
 5. Run inference and evaluation cells for detection outputs and metrics.
 
 ### Using Pretrained Weights
 
-Download the trained model weights from [Google Drive (placeholder -- to be updated)] and load directly:
-
 ```python
 from ultralytics import YOLO
 
-model = YOLO('path/to/best.pt')
+model = YOLO('weights and results/optimised 1280/best.pt')
 results = model.predict(source='image.jpg', conf=0.25, iou=0.45, imgsz=1280)
 ```
 
@@ -374,16 +479,18 @@ results = model.predict(source='image.jpg', conf=0.25, iou=0.45, imgsz=1280)
 ### Strengths
 
 - Systematic iterative training approach with data-driven decisions at each stage.
-- Comprehensive EDA that directly informed preprocessing choices (class merging, resolution selection, augmentation strategy).
+- Comprehensive EDA (24 analysis cells) that directly informed preprocessing choices (class merging, resolution selection, augmentation strategy).
 - Custom P2 architectural modification demonstrates understanding of the small object detection problem beyond hyperparameter tuning.
 - SAHI integration provides a practical inference-time solution for small object recall without retraining.
+- Full tracking pipeline with ByteTrack and BotSORT for unique object counting across video frames.
+- Production-quality web application with modular architecture, configurable inference settings, and weight upload support.
 
 ### Limitations
 
 - Human detection AP on the test set (0.4531) remains significantly lower than car detection (0.7864) due to the extreme small object challenge inherent in aerial imagery.
 - The strict IoU metric (mAP@0.5:0.95) penalizes localization error on tiny bounding boxes disproportionately. A 2-pixel offset on a 13-pixel box is a larger IoU penalty than the same offset on a 38-pixel box.
 - Counting accuracy degrades in highly dense scenes (100+ humans) where overlapping detections are suppressed by NMS.
-- Inference speed with SAHI is approximately 9x slower than standard inference due to per-tile processing.
+- Inference speed with SAHI is approximately 9× slower than standard inference due to per-tile processing.
 
 ### Challenges Faced
 

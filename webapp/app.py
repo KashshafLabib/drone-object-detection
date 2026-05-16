@@ -50,15 +50,52 @@ def render_sidebar():
     with st.sidebar:
         sidebar_section_title("MODEL")
 
-        model_path = find_model_path()
-        custom_path = st.text_input("Model weights path", value=model_path or "best.pt")
+        # --- Weight source selection ---
+        weight_source = st.radio(
+            "Weight source",
+            ["Auto-detect / path", "Upload weights (.pt)"],
+            horizontal=True,
+            label_visibility="collapsed",
+        )
 
-        if custom_path and os.path.exists(custom_path):
-            model = get_model(custom_path)
-            st.success(f"Loaded: {Path(custom_path).name}")
+        model = None
+        active_path = None
+
+        if weight_source == "Upload weights (.pt)":
+            uploaded_wt = st.file_uploader(
+                "Upload model weights",
+                type=["pt"],
+                key="weight_upload",
+                help="Upload a YOLOv8/v11 .pt weights file.",
+            )
+            if uploaded_wt is not None:
+                # Persist uploaded file across reruns in a session-stable dir
+                upload_dir = os.path.join(tempfile.gettempdir(), "drone_det_weights")
+                os.makedirs(upload_dir, exist_ok=True)
+                saved_path = os.path.join(upload_dir, uploaded_wt.name)
+                with open(saved_path, "wb") as f:
+                    f.write(uploaded_wt.getbuffer())
+                model = get_model(saved_path)
+                active_path = saved_path
+                st.success(f"Loaded uploaded: {uploaded_wt.name}")
+            else:
+                st.info("Upload a .pt file to begin.")
+                st.stop()
         else:
-            st.error("Model not found. Place best.pt in the project root or specify the path.")
-            st.stop()
+            auto_path = find_model_path()
+            custom_path = st.text_input(
+                "Model weights path", value=auto_path or "best.pt"
+            )
+            if custom_path and os.path.exists(custom_path):
+                model = get_model(custom_path)
+                active_path = custom_path
+                st.success(f"Loaded: {Path(custom_path).name}")
+            else:
+                st.error(
+                    "Model not found. Place best.pt in the project "
+                    "root, specify the path, or switch to Upload."
+                )
+                st.stop()
 
         section_divider()
         sidebar_section_title("DETECTION SETTINGS")
@@ -120,7 +157,7 @@ def render_sidebar():
         **Training**: 1280px, AdamW, 86 epochs
         """)
 
-    return model, custom_path, conf, iou, imgsz, tracker, use_sahi, sahi_slice, sahi_overlap
+    return model, active_path, conf, iou, imgsz, tracker, use_sahi, sahi_slice, sahi_overlap
 
 
 # ── Image Detection Page ───────────────────────────────────────────
