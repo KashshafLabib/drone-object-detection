@@ -1,5 +1,7 @@
 # Drone Human Detection and Counting System
 
+[![W&B](https://img.shields.io/badge/Weights_&_Biases-dashboard-yellow?logo=weightsandbiases)](https://wandb.ai/labibkashshaf-islamic-university-of-technology/drone-object-detection)
+
 An end-to-end computer vision pipeline for detecting humans and cars in drone/aerial imagery, counting total humans per frame, and visualizing results. Built on the VisDrone 2019 dataset using YOLOv11 with architectural modifications for small object detection.
 
 ---
@@ -442,6 +444,16 @@ drone-object-detection/
 ---
 
 ## Setup and Reproduction
+
+### Downloading Model Weights
+
+> **Note:** Due to their large size, the trained model weights (`.pt` files) are not stored in this GitHub repository. They are hosted on Weights & Biases as versioned artifacts.
+
+1. Go to the [W&B Artifacts Dashboard](https://wandb.ai/labibkashshaf-islamic-university-of-technology/drone-object-detection/artifacts)
+2. Download `model-optimized-1280px` and/or `model-baseline-640px`.
+3. Place the downloaded `.pt` files in the respective folders under `weights/` in the project root:
+   - `weights/optimized_1280/best.pt`
+   - `weights/baseline_640/best.pt`
 
 ### Requirements
 
